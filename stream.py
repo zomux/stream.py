@@ -72,13 +72,13 @@ Articles written about this module by the author can be retrieved from
 
 from __future__ import with_statement
 
-import __builtin__
+import builtins
 import copy
 import collections
 import heapq
 import itertools
 import operator
-import Queue
+from queue import Queue
 import re
 import select
 import sys
@@ -86,8 +86,6 @@ import threading
 import time
 
 from operator import itemgetter, attrgetter
-
-zip = itertools.izip
 
 try:
 	import multiprocessing
@@ -129,25 +127,25 @@ class Stream(Iterable):
 	"""A stream is both a lazy list and an iterator-processing function.
 
 	The lazy list is represented by the attribute 'iterator'.
-	
+
 	The iterator-processing function is represented by the method
 	__call__(iterator), which should return a new iterator
 	representing the output of the Stream.
-	
+
 	By default, __call__(iterator) chains iterator with self.iterator,
 	appending itself to the input stream in effect.
-	
+
 	__pipe__(inpipe) defines the connection mechanism between Stream objects.
 	By default, it replaces self.iterator with the iterator returned by
 	__call__(iter(inpipe)).
-	
+
 	A Stream subclass will usually implement __call__, unless it is an
 	accumulator and will not return a Stream, in which case it will need to
 	implement __pipe__.
-	
+
 	The `>>` operator works as follow: the expression `a >> b` means
 	`b.__pipe__(a) if hasattr(b, '__pipe__') else b(a)`.
-	
+
 	>>> [1, 2, 3] >> Stream([4, 5, 6]) >> list
 	[1, 2, 3, 4, 5, 6]
 	"""
@@ -202,7 +200,7 @@ class Stream(Iterable):
 
 class take(Stream):
 	"""Take the firts n items of the input stream, return a Stream.
-	
+
 	>>> seq(1, 2) >> take(10)
 	Stream([1, 3, 5, 7, 9, 11, 13, 15, 17, 19])
 	"""
@@ -348,11 +346,11 @@ class dropi(Stream):
 		def idropper():
 			counter = seq()
 			def try_next_idx():
-				## so that the stream keeps going 
+				## so that the stream keeps going
 				## after the discard iterator is exhausted
 				try:
 					return next(self.indexiter), False
-				except StopIteration:		
+				except StopIteration:
 					return -1, True
 			old_idx = -1
 			idx, exhausted = try_next_idx()                  # next value to discard
@@ -360,7 +358,7 @@ class dropi(Stream):
 				c = next(counter)
 				elem = next(iterator)
 				while not exhausted and idx <= old_idx:    # ignore bad values
-					idx, exhausted = try_next_idx()	
+					idx, exhausted = try_next_idx()
 				if c != idx:
 					yield elem
 				elif not exhausted:
@@ -383,7 +381,7 @@ class Processor(Stream):
 		"""
 		super(Processor, self).__init__()
 		self.function = function
-	
+
 	def __call__(self, iterator):
 		return self.function(iterator)
 
@@ -480,11 +478,11 @@ class fold(Stream):
 	argument to a value and each element in turn.  At each step, the value is
 	set to the value returned by the function, thus it is, in effect, an
 	accumulation.
-	
+
 	Intermediate values are yielded (similar to Haskell `scanl`).
 
 	This example calculate partial sums of the series 1 + 1/2 + 1/4 +...
-	
+
 	>>> gseq(0.5) >> fold(operator.add) >> item[:5]
 	[1, 1.5, 1.75, 1.875, 1.9375]
 	"""
@@ -672,9 +670,9 @@ class ThreadedFeeder(Iterable):
 		"""Create a feeder that start the given generator with
 		*args and **kwargs in a separate thread.  The feeder will
 		act as an eagerly evaluating proxy of the generator.
-		
+
 		The feeder can then be iter()'ed over by other threads.
-		
+
 		This should improve performance when the generator often
 		blocks in system calls.
 		"""
@@ -689,7 +687,7 @@ class ThreadedFeeder(Iterable):
 					break
 		self.thread = threading.Thread(target=feeder)
 		self.thread.start()
-	
+
 	def __iter__(self):
 		return _iterqueue(self.outqueue)
 
@@ -705,9 +703,9 @@ class ForkedFeeder(Iterable):
 		"""Create a feeder that start the given generator with
 		*args and **kwargs in a child process. The feeder will
 		act as an eagerly evaluating proxy of the generator.
-		
+
 		The feeder can then be iter()'ed over by other processes.
-		
+
 		This should improve performance when the generator often
 		blocks in system calls.  Note that serialization could
 		be costly.
@@ -723,13 +721,13 @@ class ForkedFeeder(Iterable):
 					break
 		self.process = multiprocessing.Process(target=feed)
 		self.process.start()
-	
+
 	def __iter__(self):
 		return _iterrecv(self.outpipe)
 
 	def join(self):
 		self.process.join()
-	
+
 	def __repr__(self):
 		return '<ForkedFeeder at %s>' % hex(id(self))
 
@@ -740,15 +738,15 @@ class ForkedFeeder(Iterable):
 
 class ThreadPool(Stream):
 	"""Work on the input stream asynchronously using a pool of threads.
-	
+
 	>>> range(10) >> ThreadPool(map(lambda x: x*x)) >> sum
 	285
-	
+
 	The pool object is an iterable over the output values.  If an
 	input value causes an Exception to be raised, the tuple (value,
 	exception) is put into the pool's `failqueue`.  The attribute
 	`failure` is a thead-safe iterator over the `failqueue`.
-	
+
 	See also: Executor
 	"""
 	def __init__(self, function, poolsize=_nCPU, args=[], kwargs={}):
@@ -771,7 +769,7 @@ class ThreadPool(Stream):
 					next(dupinput)
 				except StopIteration:
 					break
-				except Exception, e:
+				except Exception as e:
 					self.failqueue.put((next(dupinput), e))
 		self.worker_threads = []
 		for _ in range(poolsize):
@@ -789,7 +787,7 @@ class ThreadPool(Stream):
 		self.cleaner_thread = threading.Thread(target=cleanup)
 		self.cleaner_thread.start()
 		self.iterator = _iterqueue(self.outqueue)
-	
+
 	def __call__(self, inpipe):
 		if self.closed:
 			raise BrokenPipe('All workers are dead, refusing to summit jobs. '
@@ -801,25 +799,25 @@ class ThreadPool(Stream):
 		self.feeder_thread = threading.Thread(target=feed)
 		self.feeder_thread.start()
 		return self.iterator
-	
+
 	def join(self):
 		self.cleaner_thread.join()
-	
+
 	def __repr__(self):
 		return '<ThreadPool(poolsize=%s) at %s>' % (self.poolsize, hex(id(self)))
 
 
 class ProcessPool(Stream):
 	"""Work on the input stream asynchronously using a pool of processes.
-	
+
 	>>> range(10) >> ProcessPool(map(lambda x: x*x)) >> sum
 	285
-	
+
 	The pool object is an iterable over the output values.  If an
 	input value causes an Exception to be raised, the tuple (value,
 	exception) is put into the pool's `failqueue`.  The attribute
 	`failure` is a thead-safe iterator over the `failqueue`.
-	
+
 	See also: Executor
 	"""
 	def __init__(self, function, poolsize=_nCPU, args=[], kwargs={}):
@@ -843,7 +841,7 @@ class ProcessPool(Stream):
 					next(dupinput)
 				except StopIteration:
 					break
-				except Exception, e:
+				except Exception as e:
 					self.failqueue.put((next(dupinput), e))
 		self.worker_processes = []
 		for _ in range(self.poolsize):
@@ -861,7 +859,7 @@ class ProcessPool(Stream):
 		self.cleaner_thread = threading.Thread(target=cleanup)
 		self.cleaner_thread.start()
 		self.iterator = _iterqueue(self.outqueue)
-	
+
 	def __call__(self, inpipe):
 		if self.closed:
 			raise BrokenPipe('All workers are dead, refusing to summit jobs. '
@@ -873,33 +871,33 @@ class ProcessPool(Stream):
 		self.feeder_thread = threading.Thread(target=feed)
 		self.feeder_thread.start()
 		return self.iterator
-	
+
 	def join(self):
 		self.cleaner_thread.join()
-	
+
 	def __repr__(self):
 		return '<ProcessPool(poolsize=%s) at %s>' % (self.poolsize, hex(id(self)))
 
 
 class Executor(object):
 	"""Provide a fine-grained level of control over a ThreadPool or ProcessPool.
-	
+
 	The constructor takes a pool class and arguments to its constructor::
 
 	  >>> executor = Executor(ThreadPool, map(lambda x: x*x))
-	
+
 	Job ids are returned when items are submitted::
 
 	  >>> executor.submit(*range(10))
 	  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 	  >>> executor.submit('foo')
 	  10
-	
+
 	A call to close() ends jobs submission.  Workers threads/processes
 	are now allowed to terminate after all jobs are completed::
 
 	  >>> executor.close()
-	
+
 	The `result` and `failure` attributes are Stream instances and
 	thus iterable.  The returned iterators behave as follow: their
 	next() calls will block until a next output is available, or
@@ -935,14 +933,14 @@ class Executor(object):
 		self.result = Stream(_iterqueue(self.resultqueue))
 		self.failure = Stream(_iterqueue(self.failqueue))
 		self.closed = False
-		
+
 		self.lock = threading.Lock()
 		## Acquired to submit and update job statuses.
-		
+
 		self.sema = threading.BoundedSemaphore(poolsize)
 		## Used to throttle transfer from waitqueue to pool.inqueue,
 		## acquired by input_feeder, released by trackers.
-		
+
 		def feed_input():
 			for id, item in _iterqueue(self.waitqueue):
 				self.sema.acquire()
@@ -955,7 +953,7 @@ class Executor(object):
 			self.pool.inqueue.put(StopIteration)
 		self.inputfeeder_thread = threading.Thread(target=feed_input)
 		self.inputfeeder_thread.start()
-		
+
 		def track_result():
 			for id, item in self.pool:
 				self.sema.release()
@@ -965,7 +963,7 @@ class Executor(object):
 			self.resultqueue.put(StopIteration)
 		self.resulttracker_thread = threading.Thread(target=track_result)
 		self.resulttracker_thread.start()
-		
+
 		def track_failure():
 			for outval, exception in self.pool.failure:
 				self.sema.release()
@@ -976,7 +974,7 @@ class Executor(object):
 			self.failqueue.put(StopIteration)
 		self.failuretracker_thread = threading.Thread(target=track_failure)
 		self.failuretracker_thread.start()
-	
+
 	def submit(self, *items):
 		"""Return job ids assigned to the submitted items."""
 		with self.lock:
@@ -992,10 +990,10 @@ class Executor(object):
 			return id - 1
 		else:
 			return range(id - len(items), id)
-	
+
 	def cancel(self, *ids):
 		"""Try to cancel jobs with associated ids.
-		
+
 		Return the actual number of jobs cancelled.
 		"""
 		ncancelled = 0
@@ -1019,10 +1017,10 @@ class Executor(object):
 				return [self._status[i] for i in ids]
 			else:
 				return self._status[ids[0]]
-	
+
 	def close(self):
 		"""Signal that the executor will no longer accept job submission.
-		
+
 		Worker threads/processes are now allowed to terminate after all
 		jobs have been are completed.  Without a call to close(), they will
 		stay around forever waiting for more jobs to come.
@@ -1032,7 +1030,7 @@ class Executor(object):
 				return
 			self.waitqueue.put(StopIteration)
 			self.closed = True
-	
+
 	def join(self):
 		"""Note that the Executor must be close()'d elsewhere,
 		or join() will never return.
@@ -1041,10 +1039,10 @@ class Executor(object):
 		self.pool.join()
 		self.resulttracker_thread.join()
 		self.failuretracker_thread.join()
-	
+
 	def shutdown(self):
 		"""Shut down the Executor.  Suspend all waiting jobs.
-		
+
 		Running workers will terminate after finishing their current job items.
 		The call will block until all workers are terminated.
 		"""
@@ -1054,7 +1052,7 @@ class Executor(object):
 			_iterqueue(self.waitqueue) >> item[-1] # Exhaust the waitqueue
 			self.closed = True
 		self.join()
-	
+
 	def __repr__(self):
 		return '<Executor(%s, poolsize=%s) at %s>' % (self.pool.__class__.__name__,
 		                                              self.pool.poolsize,
@@ -1080,10 +1078,10 @@ class PCollector(Stream):
 					else:
 						yield item
 		self.iterator = selrecv()
-	
+
 	def __pipe__(self, inpipe):
 		self.inpipes.append(inpipe.outpipe)
-	
+
 	def __repr__(self):
 		return '<PCollector at %s>' % hex(id(self))
 
@@ -1110,10 +1108,10 @@ class _PCollector(Stream):
 					else:
 						yield item
 		self.iterator = pollrecv()
-	
+
 	def __pipe__(self, inpipe):
 		self.inpipes.append(inpipe.outpipe)
-	
+
 	def __repr__(self):
 		return '<QCollector at %s>' % hex(id(self))
 
@@ -1123,7 +1121,7 @@ if sys.platform == "win32":
 
 class QCollector(Stream):
 	"""Collect items from many ThreadedFeeder's or ThreadPool's.
-	
+
 	All input queues are polled individually.  When none is ready, the
 	collector sleeps for a fix duration before polling again.
 	"""
@@ -1145,10 +1143,10 @@ class QCollector(Stream):
 					else:
 						yield item
 		self.iterator = nonemptyget()
-	
+
 	def __pipe__(self, inpipe):
 		self.inqueues.append(inpipe.outqueue)
-	
+
 	def __repr__(self):
 		return '<QCollector at %s>' % hex(id(self))
 
@@ -1161,8 +1159,8 @@ class PSorter(Stream):
 		self.inpipes = []
 
 	def __iter__(self):
-		return heapq.merge(*__builtin__.map(_iterrecv, self.inpipes))
-	
+		return heapq.merge(*builtins.map(_iterrecv, self.inpipes))
+
 	def __pipe__(self, inpipe):
 		self.inpipes.append(inpipe.outpipe)
 
@@ -1178,11 +1176,11 @@ class QSorter(Stream):
 		self.inqueues = []
 
 	def __iter__(self):
-		return heapq.merge(*__builtin__.map(_iterqueue, self.inqueues))
-	
+		return heapq.merge(*builtins.map(_iterqueue, self.inqueues))
+
 	def __pipe__(self, inpipe):
 		self.inqueues.append(inpipe.outqueue)
-	
+
 	def __repr__(self):
 		return '<PSorter at %s>' % hex(id(self))
 
@@ -1218,7 +1216,7 @@ def gseq(ratio, initval=1):
 
 def repeatcall(func, *args):
 	"""Repeatedly call func(*args) and yield the result.
-	
+
 	Useful when func(*args) returns different results, esp. randomly.
 	"""
 	return itertools.starmap(func, itertools.repeat(args))
@@ -1226,7 +1224,7 @@ def repeatcall(func, *args):
 
 def chaincall(func, initval):
 	"""Yield func(initval), func(func(initval)), etc.
-	
+
 	>>> chaincall(lambda x: 3*x, 2) >> take(10)
 	Stream([2, 6, 18, 54, 162, 486, 1458, 4374, 13122, 39366])
 	"""
@@ -1243,8 +1241,8 @@ def chaincall(func, initval):
 def maximum(key):
 	"""
 	Curried version of the built-in max.
-	
-	>>> Stream([3, 5, 28, 42, 7]) >> maximum(lambda x: x%28) 
+
+	>>> Stream([3, 5, 28, 42, 7]) >> maximum(lambda x: x%28)
 	42
 	"""
 	return lambda s: max(s, key=key)
@@ -1253,7 +1251,7 @@ def maximum(key):
 def minimum(key):
 	"""
 	Curried version of the built-in min.
-	
+
 	>>> Stream([[13, 52], [28, 35], [42, 6]]) >> minimum(lambda v: v[0] + v[1])
 	[42, 6]
 	"""
@@ -1263,14 +1261,14 @@ def minimum(key):
 def reduce(function, initval=None):
 	"""
 	Curried version of the built-in reduce.
-	
+
 	>>> reduce(lambda x,y: x+y)( [1, 2, 3, 4, 5] )
 	15
 	"""
 	if initval is None:
-		return lambda s: __builtin__.reduce(function, s)
+		return lambda s: builtins.reduce(function, s)
 	else:
-		return lambda s: __builtin__.reduce(function, s, initval)
+		return lambda s: builtins.reduce(function, s, initval)
 
 
 #_____________________________________________________________________
